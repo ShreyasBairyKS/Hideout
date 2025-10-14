@@ -60,7 +60,7 @@ npm start
 ---
 
 ## 📦 Requirements
-1.Python 3.8+
-2.Node.js 18+
-3.Git
-4.VS Code (recommended)
+1.Python 3.8+.
+2.Node.js 18+.
+3.Git.
+4.VS Code (recommended).
