@@ -15,7 +15,7 @@ It combines the power of **steganography** (hiding data inside images) and **enc
 
 ---
 
-## 🧩 Tech Stack
+## 🧩 Tech Stack 
 
 | Layer | Technology |
 |-------|-------------|
