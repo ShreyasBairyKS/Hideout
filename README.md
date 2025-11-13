@@ -8,7 +8,7 @@ It combines the power of **steganography** (hiding data inside images) and **enc
 ## 🚀 Features
 
 - 🔒 **Encrypted Messaging** – All messages are securely encrypted using AES.
-- 🖼 **Image Steganography** – Messages are hidden inside image pixels using LSB (Least Significant Bit) encoding. 
+- 🖼 **Image Steganography** – Messages are hidden inside image pixels using LSB (Least Significant Bit) encoding.
 - 💬 **Image-Based Chat** – Users chat by exchanging images instead of plain text.
 - 🧠 **Smart Decode** – Uploaded images are automatically scanned and decoded to reveal the hidden text.
 - 🌐 **Web-Based Interface** – Built using React (frontend) and FastAPI (backend).
