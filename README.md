@@ -5,7 +5,7 @@ It combines the power of **steganography** (hiding data inside images) and **enc
 
 ---
 
-## 🚀 Features
+## 🚀 Features  
 
 - 🔒 **Encrypted Messaging** – All messages are securely encrypted using AES.
 - 🖼 **Image Steganography** – Messages are hidden inside image pixels using LSB (Least Significant Bit) encoding.
