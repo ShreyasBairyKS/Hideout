@@ -5,20 +5,25 @@ import Home from './pages/Home';
 import Encode from './pages/Encode';
 import Decode from './pages/Decode';
 import Chat from './pages/Chat';
+import { ThemeProvider } from './context/ThemeContext';
+import { ToastContainer } from './components/UI/Toast';
 
 function App() {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/encode" element={<Encode />} />
-          <Route path="/decode" element={<Decode />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Layout>
-    </Router>
+    <ThemeProvider>
+      <Router>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/encode" element={<Encode />} />
+            <Route path="/decode" element={<Decode />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Layout>
+        <ToastContainer />
+      </Router>
+    </ThemeProvider>
   );
 }
 

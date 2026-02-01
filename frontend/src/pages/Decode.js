@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Unlock, Key, MessageSquare, AlertCircle, CheckCircle } from 'lucide-react';
+import { Unlock, Key, MessageSquare, AlertCircle, CheckCircle, Copy } from 'lucide-react';
 import FileUpload from '../components/UI/FileUpload';
 import { SteganographyAPI } from '../services/api';
+import { copyToClipboard } from '../utils/helpers';
+import { showSuccessToast, showErrorToast, showCopyToast } from '../components/UI/Toast';
 
 const Decode = () => {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -25,6 +27,7 @@ const Decode = () => {
   const handleDecode = async () => {
     if (!selectedFile || !decryptionKey.trim()) {
       setError('Please select an encoded image and enter the decryption key');
+      showErrorToast('Please select an image and enter the key');
       return;
     }
 
@@ -35,10 +38,23 @@ const Decode = () => {
     try {
       const response = await SteganographyAPI.decodeMessage(selectedFile, decryptionKey.trim());
       setDecodedMessage(response.message);
+      showSuccessToast('Message decoded successfully!');
     } catch (err) {
       setError(err.message);
+      showErrorToast(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleCopyMessage = async () => {
+    if (!decodedMessage) return;
+    
+    try {
+      await copyToClipboard(decodedMessage);
+      showCopyToast('Message copied to clipboard!');
+    } catch (err) {
+      showErrorToast('Failed to copy message');
     }
   };
 
@@ -159,18 +175,28 @@ const Decode = () => {
             </div>
 
             {/* Decoded Message Display */}
-            <div className="card bg-dark-700">
+            <div className="card bg-dark-700 dark:bg-dark-700 light:bg-gray-100">
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-primary-400">
-                  <MessageSquare className="w-5 h-5" />
-                  <span className="font-semibold">Hidden Message</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-primary-400">
+                    <MessageSquare className="w-5 h-5" />
+                    <span className="font-semibold">Hidden Message</span>
+                  </div>
+                  <button
+                    onClick={handleCopyMessage}
+                    className="flex items-center gap-1 text-sm text-gray-400 hover:text-primary-400 transition-colors px-2 py-1 rounded-lg hover:bg-dark-600 dark:hover:bg-dark-600 light:hover:bg-gray-200"
+                    title="Copy message"
+                  >
+                    <Copy className="w-4 h-4" />
+                    <span>Copy</span>
+                  </button>
                 </div>
-                <div className="bg-dark-800 p-4 rounded-lg">
-                  <p className="text-gray-200 whitespace-pre-wrap break-words">
+                <div className="bg-dark-800 dark:bg-dark-800 light:bg-white p-4 rounded-lg border border-dark-600 dark:border-dark-600 light:border-gray-200">
+                  <p className="text-gray-200 dark:text-gray-200 light:text-gray-800 whitespace-pre-wrap break-words">
                     {decodedMessage}
                   </p>
                 </div>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-500">
                   Message length: {decodedMessage.length} characters
                 </p>
               </div>

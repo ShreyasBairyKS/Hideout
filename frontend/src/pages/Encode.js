@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Lock, Download, Copy, Key, CheckCircle, AlertCircle } from 'lucide-react';
+import { Lock, Download, Copy, Key, CheckCircle, AlertCircle, QrCode } from 'lucide-react';
 import FileUpload from '../components/UI/FileUpload';
+import QRCodeModal from '../components/UI/QRCodeModal';
+import ImageComparison from '../components/UI/ImageComparison';
 import { SteganographyAPI } from '../services/api';
 import { downloadBlob, copyToClipboard, generateFilename } from '../utils/helpers';
+import { showSuccessToast, showErrorToast, showCopyToast, showDownloadToast } from '../components/UI/Toast';
 
 const Encode = () => {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -10,22 +13,27 @@ const Encode = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [encodedImageUrl, setEncodedImageUrl] = useState(null);
 
   const handleFileSelect = (file) => {
     setSelectedFile(file);
     setError('');
     setResult(null);
+    setEncodedImageUrl(null);
   };
 
   const handleFileRemove = () => {
     setSelectedFile(null);
     setError('');
     setResult(null);
+    setEncodedImageUrl(null);
   };
 
   const handleEncode = async () => {
     if (!selectedFile || !message.trim()) {
       setError('Please select an image and enter a message');
+      showErrorToast('Please select an image and enter a message');
       return;
     }
 
@@ -35,8 +43,15 @@ const Encode = () => {
     try {
       const response = await SteganographyAPI.encodeMessage(selectedFile, message.trim());
       setResult(response);
+      
+      // Fetch the encoded image for comparison
+      const blob = await SteganographyAPI.downloadEncodedImage(response.file_id);
+      setEncodedImageUrl(URL.createObjectURL(blob));
+      
+      showSuccessToast('Message encoded successfully!');
     } catch (err) {
       setError(err.message);
+      showErrorToast(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -49,8 +64,10 @@ const Encode = () => {
       const blob = await SteganographyAPI.downloadEncodedImage(result.file_id);
       const filename = generateFilename('hideout_encoded', 'png');
       downloadBlob(blob, filename);
+      showDownloadToast('Image downloaded successfully!');
     } catch (err) {
       setError('Failed to download image: ' + err.message);
+      showErrorToast('Failed to download image');
     }
   };
 
@@ -59,9 +76,10 @@ const Encode = () => {
     
     try {
       await copyToClipboard(result.key);
-      // You could add a toast notification here
+      showCopyToast('Decryption key copied!');
     } catch (err) {
       setError('Failed to copy key to clipboard');
+      showErrorToast('Failed to copy key');
     }
   };
 
@@ -70,6 +88,7 @@ const Encode = () => {
     setMessage('');
     setResult(null);
     setError('');
+    setEncodedImageUrl(null);
   };
 
   return (
@@ -179,29 +198,43 @@ const Encode = () => {
             </div>
 
             {/* Key Display */}
-            <div className="card bg-dark-700">
+            <div className="card bg-dark-700 dark:bg-dark-700 light:bg-gray-100">
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-yellow-400">
                   <Key className="w-5 h-5" />
                   <span className="font-semibold">Decryption Key</span>
                 </div>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-500">
                   Save this key securely. You'll need it to decode the message.
                 </p>
-                <div className="flex items-center gap-2 bg-dark-800 p-3 rounded-lg">
-                  <code className="flex-1 text-sm font-mono text-gray-200 break-all">
+                <div className="flex items-center gap-2 bg-dark-800 dark:bg-dark-800 light:bg-white p-3 rounded-lg border border-dark-600 dark:border-dark-600 light:border-gray-200">
+                  <code className="flex-1 text-sm font-mono text-gray-200 dark:text-gray-200 light:text-gray-800 break-all">
                     {result.key}
                   </code>
                   <button
                     onClick={handleCopyKey}
-                    className="text-gray-400 hover:text-primary-400 transition-colors"
+                    className="text-gray-400 hover:text-primary-400 transition-colors p-1"
                     title="Copy to clipboard"
                   >
                     <Copy className="w-4 h-4" />
                   </button>
+                  <button
+                    onClick={() => setShowQRModal(true)}
+                    className="text-gray-400 hover:text-primary-400 transition-colors p-1"
+                    title="Show QR Code"
+                  >
+                    <QrCode className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
+
+            {/* Image Comparison */}
+            <ImageComparison 
+              originalImage={selectedFile}
+              encodedImageUrl={encodedImageUrl}
+              isVisible={!!encodedImageUrl}
+            />
 
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -233,6 +266,13 @@ const Encode = () => {
           <li>• Share the encoded image and key through different channels for maximum security</li>
         </ul>
       </div>
+
+      {/* QR Code Modal */}
+      <QRCodeModal 
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        encryptionKey={result?.key || ''}
+      />
     </div>
   );
 };
