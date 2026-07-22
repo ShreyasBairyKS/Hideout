@@ -1,7 +1,7 @@
 # 🕵️‍♂️ Hideout
 
 **Hideout** is a secure chat platform that allows users to communicate by sending **images that contain hidden, encrypted messages**.  
-It combines the power of **steganography** (hiding data inside images) and **encryption** to enable private, covert messaging.
+It combines the power of **steganography** (hiding data inside images) and **encryption** to enable private, covert messaging. 
 
 ---
 
