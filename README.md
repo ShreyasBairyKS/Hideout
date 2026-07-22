@@ -4,7 +4,7 @@
 It combines the power of **steganography** (hiding data inside images) and **encryption** to enable private, covert messaging.
 
 ---
-  
+
 ## 🚀 Features  
 
 - 🔒 **Encrypted Messaging** – All messages are securely encrypted using AES.
