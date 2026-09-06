@@ -1,5 +1,7 @@
 from PIL import Image
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 import logging
 
@@ -7,10 +9,52 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Salt for key derivation (in production, this should be stored securely)
+KEY_SALT = b'hideout_steganography_salt_v1'
+
 # Generate a symmetric encryption key
 def generate_key():
     """Generate a Fernet encryption key"""
     return Fernet.generate_key()
+
+def derive_key_from_password(password: str) -> bytes:
+    """Derive a valid Fernet key from a simple password string"""
+    if isinstance(password, bytes):
+        password_bytes = password
+    else:
+        password_bytes = password.encode()
+    
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=KEY_SALT,
+        iterations=100000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password_bytes))
+    return key
+
+def normalize_key(key) -> bytes:
+    """Normalize a key to ensure it's a valid Fernet key.
+    
+    If the key is already a valid Fernet key (44 bytes, base64), use it directly.
+    Otherwise, derive a Fernet key from it as a password.
+    """
+    if isinstance(key, str):
+        key_bytes = key.encode()
+    else:
+        key_bytes = key
+    
+    # Check if it's already a valid Fernet key (44 characters, base64 encoded)
+    try:
+        if len(key_bytes) == 44:
+            # Try to use it as a Fernet key directly
+            Fernet(key_bytes)
+            return key_bytes
+    except Exception:
+        pass
+    
+    # Otherwise, derive a key from the password
+    return derive_key_from_password(key_bytes.decode() if isinstance(key_bytes, bytes) else key_bytes)
 
 # Encrypt a message using the key
 def encrypt_message(message, key):
@@ -36,13 +80,16 @@ def decrypt_message(encrypted_message, key):
 def encode_image(input_image_path, output_image_path, message, key):
     """Hide an encrypted message in an image using LSB steganography"""
     try:
+        # Normalize the key (handle both Fernet keys and simple passwords)
+        normalized_key = normalize_key(key)
+        
         # Open and convert image to RGB if needed
         img = Image.open(input_image_path).convert('RGB')
         encoded = img.copy()
         width, height = img.size
         
         # Encrypt and prepare message
-        encrypted_msg = encrypt_message(message, key)
+        encrypted_msg = encrypt_message(message, normalized_key)
         encoded_msg = base64.b64encode(encrypted_msg).decode()
         encoded_msg += "====="  # End marker
         
@@ -91,39 +138,59 @@ def encode_image(input_image_path, output_image_path, message, key):
 def decode_image(encoded_image_path, key):
     """Extract and decrypt a hidden message from an image"""
     try:
-        img = Image.open(encoded_image_path).convert('RGB')
-        logger.info(f"Decoding message from {img.size[0]}x{img.size[1]} image")
+        # Normalize the key (handle both Fernet keys and simple passwords)
+        normalized_key = normalize_key(key)
+        logger.info(f"Using normalized key for decoding")
         
-        # Extract binary data from LSBs
-        binary_data = ""
+        img = Image.open(encoded_image_path).convert('RGB')
+        width, height = img.size
+        logger.info(f"Decoding message from {width}x{height} image")
+
+        # Extract LSBs pixel-by-pixel and decode to characters as we go, stopping
+        # as soon as the end marker is found. This scans only as far as the actual
+        # message requires (matching encode_image's uncapped capacity) instead of
+        # an arbitrary bit limit that could cut off large messages in large images.
+        decoded_data = ""
+        bit_buffer = ""
+        found_marker = False
+
         for pixel in img.getdata():
             for n in range(3):  # RGB channels
-                binary_data += str(pixel[n] & 1)
-        
-        # Convert binary to characters
-        all_bytes = [binary_data[i: i + 8] for i in range(0, len(binary_data), 8)]
-        decoded_data = ""
-        
-        for byte in all_bytes:
-            if len(byte) == 8:  # Valid byte
-                char = chr(int(byte, 2))
-                decoded_data += char
-                
-                # Check for end marker
-                if decoded_data.endswith("====="):
-                    decoded_data = decoded_data[:-5]  # Remove end marker
-                    break
-        
-        if not decoded_data:
-            raise ValueError("No hidden message found or invalid end marker")
+                bit_buffer += str(pixel[n] & 1)
+                if len(bit_buffer) == 8:
+                    decoded_data += chr(int(bit_buffer, 2))
+                    bit_buffer = ""
+
+                    if decoded_data.endswith("====="):
+                        decoded_data = decoded_data[:-5]  # Remove end marker
+                        found_marker = True
+                        logger.info(f"Found end marker, extracted {len(decoded_data)} chars")
+                        break
+            if found_marker:
+                break
+
+        if not decoded_data or not decoded_data.strip():
+            raise ValueError("No hidden message found - image may not contain encoded data")
+
+        if not found_marker:
+            raise ValueError("No valid encoded data found in image - end marker not found")
         
         # Decode base64 and decrypt
-        encrypted_message = base64.b64decode(decoded_data.encode())
-        original_message = decrypt_message(encrypted_message, key)
+        try:
+            encrypted_message = base64.b64decode(decoded_data.encode())
+        except Exception as b64_err:
+            raise ValueError(f"Invalid encoded data in image: {str(b64_err)}")
+        
+        try:
+            original_message = decrypt_message(encrypted_message, normalized_key)
+        except Exception as decrypt_err:
+            raise ValueError(f"Decryption failed - wrong key or corrupted data")
         
         logger.info("Message successfully decoded and decrypted")
         return original_message
         
+    except ValueError:
+        raise
     except Exception as e:
         logger.error(f"Decoding failed: {e}")
-        raise ValueError(f"Failed to decode message: {str(e)}")
+        raise ValueError(f"Failed to decode: {str(e)}")

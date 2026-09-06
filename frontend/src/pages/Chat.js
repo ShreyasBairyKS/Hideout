@@ -1,130 +1,215 @@
-import React from 'react';
-import { MessageSquare, Users, Zap, ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Shield, Lock, Image, Zap } from 'lucide-react';
+import ChatWindow from '../components/Chat/ChatWindow';
+import RoomList from '../components/Chat/RoomList';
+import UsernameModal from '../components/Chat/UsernameModal';
+import CreateRoomModal from '../components/Chat/CreateRoomModal';
+import JoinRoomModal from '../components/Chat/JoinRoomModal';
+import { fetchRooms, createRoom, verifyRoomPassword, deleteRoom } from '../services/chatService';
+import { showSuccessToast, showErrorToast } from '../components/UI/Toast';
 
 const Chat = () => {
+  const [username, setUsername] = useState(() => {
+    return localStorage.getItem('hideout-username') || '';
+  });
+  const [showUsernameModal, setShowUsernameModal] = useState(!username);
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [showJoinRoomModal, setShowJoinRoomModal] = useState(null); // {id, name, isProtected}
+  const [rooms, setRooms] = useState({});
+  const [isLoadingRooms, setIsLoadingRooms] = useState(true);
+  const [currentRoom, setCurrentRoom] = useState(null); // {id, name, password}
+
+  useEffect(() => {
+    // Don't poll the room list while inside a room - it isn't shown there
+    if (currentRoom) return;
+
+    loadRooms();
+
+    // Refresh rooms every 30 seconds
+    const interval = setInterval(loadRooms, 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRoom]);
+
+  const loadRooms = async () => {
+    try {
+      const data = await fetchRooms();
+      setRooms(data.rooms || {});
+    } catch (error) {
+      console.error('Failed to fetch rooms:', error);
+    } finally {
+      setIsLoadingRooms(false);
+    }
+  };
+
+  const handleSetUsername = (newUsername) => {
+    setUsername(newUsername);
+    localStorage.setItem('hideout-username', newUsername);
+    setShowUsernameModal(false);
+    showSuccessToast(`Welcome, ${newUsername}!`);
+  };
+
+  const handleJoinRoom = (roomId, roomName) => {
+    const room = rooms[roomId];
+    
+    // Check if room is password protected
+    if (room?.is_protected) {
+      setShowJoinRoomModal({ id: roomId, name: roomName });
+    } else {
+      // Public room - join directly
+      setCurrentRoom({ id: roomId, name: roomName, password: null });
+    }
+  };
+
+  const handleJoinProtectedRoom = async (password) => {
+    if (!showJoinRoomModal) return;
+    
+    const { id, name } = showJoinRoomModal;
+    
+    // Verify password before joining
+    await verifyRoomPassword(id, password);
+    
+    // Password is correct - join with password as the decryption key
+    setCurrentRoom({ id, name, password });
+    setShowJoinRoomModal(null);
+    showSuccessToast(`Joined ${name}! Password is your decryption key.`);
+  };
+
+  const handleLeaveRoom = () => {
+    setCurrentRoom(null);
+    loadRooms(); // Refresh room list
+  };
+
+  const handleCreateRoom = async (name, description, password) => {
+    try {
+      console.log('Creating room:', { name, description, hasPassword: !!password, username });
+      const result = await createRoom(name, description, password, username);
+      console.log('Room created:', result);
+      const message = result.is_protected 
+        ? `Protected room "${name}" created! Password is the decryption key.`
+        : `Room "${name}" created!`;
+      showSuccessToast(message);
+      setShowCreateRoomModal(false);
+      loadRooms();
+    } catch (error) {
+      console.error('Room creation error:', error);
+      showErrorToast(error.message);
+    }
+  };
+
+  const handleDeleteRoom = async (roomId, roomName) => {
+    try {
+      await deleteRoom(roomId, username);
+      showSuccessToast(`Room "${roomName}" deleted`);
+      loadRooms();
+    } catch (error) {
+      showErrorToast(error.message);
+    }
+  };
+
+  // Show username modal if no username
+  if (showUsernameModal) {
+    return <UsernameModal onSubmit={handleSetUsername} />;
+  }
+
+  // Show chat window if in a room
+  if (currentRoom) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <ChatWindow
+          roomId={currentRoom.id}
+          roomName={currentRoom.name}
+          username={username}
+          roomPassword={currentRoom.password}
+          onLeave={handleLeaveRoom}
+        />
+      </div>
+    );
+  }
+
+  // Show room list
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Header */}
       <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold text-gradient">Chat Platform</h1>
-        <p className="text-xl text-gray-300">
+        <h1 className="text-4xl font-bold text-gradient">Secure Chat</h1>
+        <p className="text-xl text-gray-300 dark:text-gray-300 light:text-gray-600">
           Real-time messaging with hidden encrypted messages in images
         </p>
-      </div>
-
-      {/* Coming Soon */}
-      <div className="card bg-gradient-to-br from-primary-500/10 to-green-500/10 border-primary-500/20">
-        <div className="text-center space-y-6">
-          <div className="w-20 h-20 bg-primary-500/20 rounded-full flex items-center justify-center mx-auto">
-            <MessageSquare className="w-10 h-10 text-primary-400" />
-          </div>
-          
-          <div>
-            <h2 className="text-3xl font-bold text-primary-400 mb-2">Coming Soon!</h2>
-            <p className="text-gray-300 text-lg">
-              We're building an amazing chat platform where you can send messages 
-              hidden inside images in real-time.
-            </p>
-          </div>
-
-          {/* Features Preview */}
-          <div className="grid md:grid-cols-3 gap-6 mt-8">
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-primary-500/20 rounded-lg flex items-center justify-center mx-auto">
-                <MessageSquare className="w-6 h-6 text-primary-400" />
-              </div>
-              <h3 className="font-semibold text-gray-200">Image Messages</h3>
-              <p className="text-sm text-gray-400">
-                Send images that contain hidden encrypted messages
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-primary-500/20 rounded-lg flex items-center justify-center mx-auto">
-                <Users className="w-6 h-6 text-primary-400" />
-              </div>
-              <h3 className="font-semibold text-gray-200">Group Chats</h3>
-              <p className="text-sm text-gray-400">
-                Create secure group conversations with multiple participants
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-primary-500/20 rounded-lg flex items-center justify-center mx-auto">
-                <Zap className="w-6 h-6 text-primary-400" />
-              </div>
-              <h3 className="font-semibold text-gray-200">Real-time</h3>
-              <p className="text-sm text-gray-400">
-                Instant message delivery with WebSocket technology
-              </p>
-            </div>
-          </div>
-
-          {/* CTA */}
-          <div className="space-y-4">
-            <p className="text-gray-400">
-              In the meantime, try encoding and decoding messages manually:
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/encode" className="btn-primary inline-flex items-center gap-2">
-                Encode Message
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-              <Link to="/decode" className="btn-secondary inline-flex items-center gap-2">
-                Decode Message
-              </Link>
-            </div>
-          </div>
+        <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+          <span>Logged in as</span>
+          <span className="font-semibold text-primary-400">{username}</span>
+          <button
+            onClick={() => setShowUsernameModal(true)}
+            className="text-primary-400 hover:underline"
+          >
+            (change)
+          </button>
         </div>
       </div>
 
-      {/* Roadmap */}
+      {/* Features */}
+      <div className="grid md:grid-cols-3 gap-4">
+        <div className="card bg-gradient-to-br from-primary-500/10 to-transparent border-primary-500/20 text-center p-4">
+          <Lock className="w-8 h-8 text-primary-400 mx-auto mb-2" />
+          <h3 className="font-semibold text-gray-200 dark:text-gray-200 light:text-gray-800">End-to-End Encrypted</h3>
+          <p className="text-sm text-gray-400 dark:text-gray-400 light:text-gray-600">Messages hidden with AES encryption</p>
+        </div>
+        <div className="card bg-gradient-to-br from-green-500/10 to-transparent border-green-500/20 text-center p-4">
+          <Image className="w-8 h-8 text-green-400 mx-auto mb-2" />
+          <h3 className="font-semibold text-gray-200 dark:text-gray-200 light:text-gray-800">Image Steganography</h3>
+          <p className="text-sm text-gray-400 dark:text-gray-400 light:text-gray-600">Hide messages inside images</p>
+        </div>
+        <div className="card bg-gradient-to-br from-yellow-500/10 to-transparent border-yellow-500/20 text-center p-4">
+          <Zap className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
+          <h3 className="font-semibold text-gray-200 dark:text-gray-200 light:text-gray-800">Real-time</h3>
+          <p className="text-sm text-gray-400 dark:text-gray-400 light:text-gray-600">Instant WebSocket messaging</p>
+        </div>
+      </div>
+
+      {/* Room List */}
       <div className="card">
-        <h2 className="text-2xl font-bold text-gray-200 mb-6">Development Roadmap</h2>
-        
-        <div className="space-y-6">
-          <div className="flex items-start space-x-4">
-            <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">✓</span>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-200">Phase 1: Core Steganography</h4>
-              <p className="text-gray-400 text-sm">Encode and decode messages in images - ✅ Complete</p>
-            </div>
-          </div>
-          
-          <div className="flex items-start space-x-4">
-            <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">2</span>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-200">Phase 2: Real-time Chat</h4>
-              <p className="text-gray-400 text-sm">WebSocket integration, user sessions, message history</p>
-            </div>
-          </div>
-          
-          <div className="flex items-start space-x-4">
-            <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">3</span>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-200">Phase 3: Advanced Features</h4>
-              <p className="text-gray-400 text-sm">Auto-generated cover images, group chats, file sharing</p>
-            </div>
-          </div>
-          
-          <div className="flex items-start space-x-4">
-            <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">4</span>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-200">Phase 4: Mobile App</h4>
-              <p className="text-gray-400 text-sm">React Native app with camera integration</p>
-            </div>
-          </div>
-        </div>
+        <RoomList
+          rooms={rooms}
+          currentUsername={username}
+          onJoinRoom={handleJoinRoom}
+          onCreateRoom={() => setShowCreateRoomModal(true)}
+          onDeleteRoom={handleDeleteRoom}
+          isLoading={isLoadingRooms}
+        />
       </div>
+
+      {/* How it works */}
+      <div className="card bg-blue-500/5 border-blue-500/20">
+        <h3 className="font-semibold text-blue-400 mb-3 flex items-center gap-2">
+          <Shield className="w-5 h-5" />
+          How Secure Chat Works
+        </h3>
+        <ul className="space-y-2 text-sm text-blue-100/80 dark:text-blue-100/80 light:text-blue-900/80">
+          <li>• <strong>Join a room</strong> - Select or create a chat room (some require passwords)</li>
+          <li>• <strong>Password = Decryption Key</strong> - For protected rooms, the password is used to decode hidden messages</li>
+          <li>• <strong>Send hidden messages</strong> - Click the image icon to send a photo with a secret message embedded</li>
+          <li>• <strong>Auto-decode in protected rooms</strong> - If you joined with the password, images are auto-decoded!</li>
+          <li>• <strong>Public rooms</strong> - Share encryption keys separately or include them with the image</li>
+        </ul>
+      </div>
+
+      {/* Create Room Modal */}
+      {showCreateRoomModal && (
+        <CreateRoomModal
+          onSubmit={handleCreateRoom}
+          onCancel={() => setShowCreateRoomModal(false)}
+        />
+      )}
+
+      {/* Join Protected Room Modal */}
+      {showJoinRoomModal && (
+        <JoinRoomModal
+          roomName={showJoinRoomModal.name}
+          onSubmit={handleJoinProtectedRoom}
+          onCancel={() => setShowJoinRoomModal(null)}
+        />
+      )}
     </div>
   );
 };
