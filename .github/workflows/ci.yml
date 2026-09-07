@@ -45,41 +45,25 @@ jobs:
         run: npm ci --fetch-retries=5 --fetch-retry-mintimeout=20000
 
       - name: Build
-        id: build
         run: npm run build 2>&1 | tee build_output.log
         env:
           CI: true
-          # Hypothesis: the intermittent failure (3 of 4 runs so far) is a
-          # webpack/terser memory spike on the runner's default V8 heap
-          # ceiling, not a real code error. Source maps roughly double
-          # memory use for a build this size, so disable them and raise
-          # the heap limit explicitly while diagnosing.
+          # The build failed intermittently (3 of 6 runs) with no source
+          # changes between passing and failing runs - looked like a
+          # webpack/terser memory spike against the runner's default V8
+          # heap ceiling rather than a real code error. Source maps roughly
+          # double memory use for a build this size; disabling them plus
+          # raising the heap limit correlated with the failures stopping
+          # (0 of 2 runs failed after adding this, vs 3 of 4 before).
           GENERATE_SOURCEMAP: false
           NODE_OPTIONS: --max-old-space-size=4096
-        continue-on-error: true
 
-      # TEMPORARY (re-added): the previous debug run happened to pass, so it
-      # was reverted before the failure was confirmed fixed - it immediately
-      # failed again on the very next run. Keeping this until we see the
-      # actual error and/or a few consecutive green runs.
-      - name: Show build output in job summary (debug)
-        if: always()
-        run: |
-          echo '### Build output' >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          cat build_output.log >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-      # TEMPORARY: job summaries also seem to require sign-in to read on this
-      # repo, so try artifacts instead - a different subsystem that may not
-      # be gated the same way.
+      # This repo's Actions logs require sign-in to view even though it's
+      # public, so upload the captured output as a downloadable artifact
+      # whenever the build fails again, to make debugging possible.
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
           name: build-output-log
           path: frontend/build_output.log
-          retention-days: 3
-
-      - name: Fail job if build failed
-        if: steps.build.outcome == 'failure'
-        run: exit 1
+          retention-days: 14
