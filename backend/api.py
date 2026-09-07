@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, Form, HTTPException, WebSocket, WebSock
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from stego import encode_image, decode_image, generate_key
+import database
 import os
 import re
 import uuid
@@ -53,37 +54,16 @@ class ConnectionManager:
     """Manages WebSocket connections and chat rooms"""
     
     def __init__(self):
-        # room_id -> set of (websocket, username)
+        # room_id -> set of (websocket, username) - sockets are process-local,
+        # so this (unlike rooms/messages) is never persisted to the database.
         self.active_connections: Dict[str, List[tuple]] = {}
-        # Store message history per room (in production, use a database)
-        self.message_history: Dict[str, List[dict]] = {}
-        # Available rooms (now with optional password and creator tracking)
-        self.rooms: Dict[str, dict] = {
-            "general": {
-                "name": "General", 
-                "description": "General discussion", 
-                "created_at": datetime.now().isoformat(),
-                "created_by": "system",  # System-created rooms can't be deleted
-                "password_hash": None,  # No password = public room
-                "is_protected": False
-            },
-            "secret-ops": {
-                "name": "Secret Ops", 
-                "description": "Top secret communications - Password protected!", 
-                "created_at": datetime.now().isoformat(),
-                "created_by": "system",
-                "password_hash": hash_password("secret123"),  # Default password for demo
-                "is_protected": True
-            },
-            "crypto-chat": {
-                "name": "Crypto Chat", 
-                "description": "Cryptography enthusiasts", 
-                "created_at": datetime.now().isoformat(),
-                "created_by": "system",
-                "password_hash": None,
-                "is_protected": False
-            },
-        }
+
+        database.init_db()
+        database.seed_default_rooms(hash_password)
+        # Rooms and message history are persisted in SQLite (backend/hideout.db);
+        # these dicts are just an in-memory cache loaded at startup for fast access.
+        self.rooms: Dict[str, dict] = database.load_rooms()
+        self.message_history: Dict[str, List[dict]] = database.load_all_messages()
     
     def verify_room_password(self, room_id: str, password: Optional[str]) -> bool:
         """Verify if the provided password is correct for the room"""
@@ -144,6 +124,7 @@ class ConnectionManager:
             # Keep only last 100 messages per room
             if len(self.message_history[room_id]) > 100:
                 self.message_history[room_id] = self.message_history[room_id][-100:]
+            database.save_message(room_id, message)
         
         disconnected = []
         for websocket, username in self.active_connections[room_id]:
@@ -194,8 +175,8 @@ def create_room(
         raise HTTPException(status_code=400, detail="Room already exists")
     
     is_protected = bool(password and password.strip())
-    
-    manager.rooms[room_id] = {
+
+    room = {
         "name": name,
         "description": description,
         "created_at": datetime.now().isoformat(),
@@ -203,6 +184,8 @@ def create_room(
         "password_hash": hash_password(password) if is_protected else None,
         "is_protected": is_protected
     }
+    database.save_room(room_id, room)
+    manager.rooms[room_id] = room
     return {"status": "success", "room_id": room_id, "is_protected": is_protected, "created_by": username}
 
 @app.delete("/rooms/{room_id}")
@@ -232,8 +215,9 @@ async def delete_room(room_id: str, username: str = Form(...)):
     # Delete message history
     if room_id in manager.message_history:
         del manager.message_history[room_id]
-    
-    # Delete the room
+
+    # Delete the room (cascades to its messages in the database)
+    database.delete_room(room_id)
     del manager.rooms[room_id]
     
     return {"status": "success", "message": f"Room '{room_id}' deleted"}
