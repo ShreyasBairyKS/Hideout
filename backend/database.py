@@ -4,12 +4,16 @@ Active WebSocket connections are never persisted (a socket is only ever
 meaningful within one running process) - only rooms and their message
 history survive a restart.
 """
+import os
 import sqlite3
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
 
-DB_PATH = Path(__file__).resolve().parent / "hideout.db"
+# HIDEOUT_DB_PATH lets the test suite point this at a throwaway file instead
+# of the real database; unset in normal (dev/prod) operation.
+DB_PATH = Path(os.environ["HIDEOUT_DB_PATH"]) if os.environ.get("HIDEOUT_DB_PATH") \
+    else Path(__file__).resolve().parent / "hideout.db"
 
 # Keep at most this many messages per room, matching the previous in-memory cap.
 MAX_MESSAGES_PER_ROOM = 100

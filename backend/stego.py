@@ -12,6 +12,15 @@ logger = logging.getLogger(__name__)
 # Salt for key derivation (in production, this should be stored securely)
 KEY_SALT = b'hideout_steganography_salt_v1'
 
+# Marks the end of the hidden payload. Deliberately built from a character
+# ('|') that never appears in base64 output (alphabet is A-Z a-z 0-9 + / =).
+# Using '=' here (as a previous version did) is broken: base64 payloads can
+# themselves end in 1-2 '=' padding characters, so a run of '=' at the
+# boundary between real padding and the marker is ambiguous and can be cut
+# in the wrong place - corrupting roughly 1 in 3 messages (whichever ones
+# happen to need 2 padding characters) so they fail to decode.
+END_MARKER = "|||||"
+
 # Generate a symmetric encryption key
 def generate_key():
     """Generate a Fernet encryption key"""
@@ -91,7 +100,7 @@ def encode_image(input_image_path, output_image_path, message, key):
         # Encrypt and prepare message
         encrypted_msg = encrypt_message(message, normalized_key)
         encoded_msg = base64.b64encode(encrypted_msg).decode()
-        encoded_msg += "====="  # End marker
+        encoded_msg += END_MARKER
         
         # Convert message to binary
         binary_message = ''.join(format(ord(c), '08b') for c in encoded_msg)
@@ -161,8 +170,8 @@ def decode_image(encoded_image_path, key):
                     decoded_data += chr(int(bit_buffer, 2))
                     bit_buffer = ""
 
-                    if decoded_data.endswith("====="):
-                        decoded_data = decoded_data[:-5]  # Remove end marker
+                    if decoded_data.endswith(END_MARKER):
+                        decoded_data = decoded_data[:-len(END_MARKER)]  # Remove end marker
                         found_marker = True
                         logger.info(f"Found end marker, extracted {len(decoded_data)} chars")
                         break
