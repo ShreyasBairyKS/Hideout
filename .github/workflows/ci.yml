@@ -70,6 +70,16 @@ jobs:
           cat build_output.log >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
+      # TEMPORARY: job summaries also seem to require sign-in to read on this
+      # repo, so try artifacts instead - a different subsystem that may not
+      # be gated the same way.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-output-log
+          path: frontend/build_output.log
+          retention-days: 3
+
       - name: Fail job if build failed
         if: steps.build.outcome == 'failure'
         run: exit 1
