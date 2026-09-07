@@ -45,6 +45,22 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build
+        id: build
+        run: npm run build 2>&1 | tee build_output.log
         env:
           CI: true
+        continue-on-error: true
+
+      # TEMPORARY: surface the build output somewhere visible without needing
+      # "sign in to view logs" on this run, so the actual error can be read.
+      - name: Show build output in job summary (debug)
+        if: always()
+        run: |
+          echo '### Build output' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat build_output.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job if build failed
+        if: steps.build.outcome == 'failure'
+        run: exit 1
